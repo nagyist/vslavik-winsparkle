@@ -59,7 +59,9 @@ bool is_compatible_with_windows_version(const Appcast &item)
     if (item.MinOSVersion.empty())
         return true;
 
-    OSVERSIONINFOEXW osvi = { sizeof(osvi), 0, 0, 0, 0, { 0 }, 0, 0 };
+    OSVERSIONINFOEXW osvi = {};
+    osvi.dwOSVersionInfoSize = sizeof(osvi);
+
     DWORDLONG const dwlConditionMask = VerSetConditionMask(
         VerSetConditionMask(
         VerSetConditionMask(
@@ -67,8 +69,20 @@ bool is_compatible_with_windows_version(const Appcast &item)
         VER_MINORVERSION, VER_GREATER_EQUAL),
         VER_SERVICEPACKMAJOR, VER_GREATER_EQUAL);
 
-    sscanf(item.MinOSVersion.c_str(), "%lu.%lu.%hu", &osvi.dwMajorVersion,
-        &osvi.dwMinorVersion, &osvi.wServicePackMajor);
+    if (sscanf(item.MinOSVersion.c_str(), "%lu.%lu.%lu",
+               &osvi.dwMajorVersion, &osvi.dwMinorVersion, &osvi.dwBuildNumber) == 0)
+    {
+        // failed to parse version number, ignore the value
+        return true;
+    }
+
+    // backwards compatibility with WinSparkle < 0.8.2 which used major.minor.sp
+	// instead of major.minor.build for the version number:
+    if (osvi.dwBuildNumber < 100)
+    {
+        osvi.wServicePackMajor = static_cast<WORD>(osvi.dwBuildNumber);
+		osvi.dwBuildNumber = 0;
+    }
 
     return VerifyVersionInfoW(&osvi, VER_MAJORVERSION | VER_MINORVERSION |
         VER_SERVICEPACKMAJOR, dwlConditionMask) != FALSE;
